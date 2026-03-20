@@ -4,6 +4,19 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+const cors = require('cors'); // Add this line if it's missing at the top
+
+app.use(cors({
+    origin: '*', // This allows ANY website to talk to your backend
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Add this for extra security permission
+app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline';");
+    next();
+});
 const port = process.env.PORT || 3000;
 
 // 1. PREEMPTIVE MOVE: Open the gates for CORS immediately
