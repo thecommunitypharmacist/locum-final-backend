@@ -56,7 +56,16 @@ app.get('/api/bookings', async (req, res) => {
         res.status(500).json({ error: 'Database connection failed', details: err.message });
     }
 });
-
+// --- EMERGENCY LOGIN DO NOT LEAVE IN PRODUCTION ---
+app.post('/api/login', (req, res) => {
+    // This allows you to enter the calendar without a password check
+    console.log("Emergency Login Triggered");
+    res.json({ 
+        success: true, 
+        token: 'emergency-token-123',
+        message: 'Welcome back!' 
+    });
+});
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
