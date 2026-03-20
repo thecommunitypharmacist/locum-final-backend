@@ -56,6 +56,33 @@ app.get('/api/bookings', async (req, res) => {
         res.status(500).json({ error: 'Database connection failed', details: err.message });
     }
 });
+
+// 6. SAVE ROUTE: This is what March 20th needs to turn green
+app.post('/api/bookings', async (req, res) => {
+    const { bookings } = req.body;
+    
+    try {
+        // Clear existing bookings first (to avoid duplicates) or use an UPSERT
+        await pool.query('DELETE FROM bookings');
+
+        for (const booking of bookings) {
+            // Convert British/ISO dates to pure YYYY-MM-DD for the database
+            const dbDate = new Date(booking.date).toISOString().split('T')[0];
+            
+            await pool.query(
+                'INSERT INTO bookings (booking_date, status) VALUES ($1, $2)',
+                [dbDate, booking.status]
+            );
+        }
+
+        console.log(`Successfully saved ${bookings.length} bookings.`);
+        res.json({ success: true, message: 'Bookings saved to database' });
+    } catch (err) {
+        console.error('Save Error:', err.message);
+        res.status(500).json({ error: 'Failed to save bookings', details: err.message });
+    }
+});
+
 // --- EMERGENCY LOGIN DO NOT LEAVE IN PRODUCTION ---
 app.post('/api/login', (req, res) => {
     // This allows you to enter the calendar without a password check
