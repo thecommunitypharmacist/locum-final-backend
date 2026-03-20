@@ -57,6 +57,29 @@ app.get('/api/bookings', async (req, res) => {
     }
 });
 
+app.post('/api/bookings', async (req, res) => {
+    // This looks for the 'bookings' package we sent from the frontend
+    const { bookings } = req.body; 
+    
+    try {
+        // Clear old dates to keep the database fresh
+        await pool.query('DELETE FROM bookings');
+
+        for (const item of bookings) {
+            await pool.query(
+                'INSERT INTO bookings (booking_date, status) VALUES ($1, $2)',
+                [item.date, item.status]
+            );
+        }
+
+        console.log(`✅ Saved ${bookings.length} dates to the database.`);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ Database Save Error:', err.message);
+        res.status(500).json({ error: 'Save failed' });
+    }
+});
+
 // 6. SAVE ROUTE: This is what March 20th needs to turn green
 app.post('/api/bookings', async (req, res) => {
     const { bookings } = req.body;
@@ -93,6 +116,31 @@ app.post('/api/login', (req, res) => {
         message: 'Welcome back!' 
     });
 });
+
+// This is the specific "Save" route your frontend is calling
+app.post('/api/bookings', async (req, res) => {
+    const { bookings } = req.body;
+    
+    try {
+        // 1. Clear existing bookings (to keep it simple)
+        await pool.query('DELETE FROM bookings');
+
+        // 2. Insert the new ones
+        for (const item of bookings) {
+            await pool.query(
+                'INSERT INTO bookings (booking_date, status) VALUES ($1, $2)',
+                [item.date, item.status]
+            );
+        }
+
+        console.log(`✅ Database updated: Saved ${bookings.length} dates.`);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ Database Error:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
