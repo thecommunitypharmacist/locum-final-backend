@@ -106,6 +106,15 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
+app.delete('/api/bookings/clear', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM bookings');
+        res.json({ success: true, message: 'Database cleared' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- EMERGENCY LOGIN DO NOT LEAVE IN PRODUCTION ---
 app.post('/api/login', (req, res) => {
     // This allows you to enter the calendar without a password check
