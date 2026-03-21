@@ -150,6 +150,18 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
+// Route to handle the "Clear All" request
+app.delete('/api/bookings/clear', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM bookings');
+        console.log('🗑️ Database cleared.');
+        res.json({ success: true, message: 'Database wiped' });
+    } catch (err) {
+        console.error('Clear Error:', err.message);
+        res.status(500).json({ error: 'Database could not be cleared' });
+    }
+});
+
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
