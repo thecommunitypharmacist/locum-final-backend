@@ -1,65 +1,62 @@
 const express = require('express');
 const { Pool } = require('pg');
+const cors = require('cors');
 
 require('dotenv').config();
 
 const app = express();
-const cors = require('cors'); // Add this line if it's missing at the top
-
-app.use(cors({
-    origin: '*', // This allows ANY website to talk to your backend
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Add this for extra security permission
-app.use((req, res, next) => {
-    res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline';");
-    next();
-});
 const port = process.env.PORT || 3000;
 
-// 1. PREEMPTIVE MOVE: Open the gates for CORS immediately
+// CORS configuration
 app.use(cors({
-    origin: '*', // Allows your local file AND your Render dashboard to connect
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// 2. DATABASE CONNECTION
+// Security headers
+app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline';");
+    next();
+});
+
+// Database connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// 3. TALKATIVE LOGGING: See every request in the console
+// Logging middleware
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} request to ${req.url}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
 });
 
-// 4. TEST ROUTE: To check if the server is awake
+// ========== ROUTES ==========
+
+// Health check
 app.get('/', (req, res) => {
     res.send('Locum Backend is ONLINE 🚀');
 });
 
-// This tells the backend what to do when the calendar just asks for "/api"
+// Get all bookings
 app.get('/api', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM bookings ORDER BY booking_date ASC');
         res.json(result.rows);
     } catch (err) {
+        console.error('Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
-// 5. BOOKINGS ROUTE: The engine for your calendar
+// Get all bookings (same as above, but more specific)
 app.get('/api/bookings', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM bookings ORDER BY booking_date ASC');
-        console.log(`Successfully fetched ${result.rows.length} bookings.`);
+        console.log(`Fetched ${result.rows.length} bookings`);
         res.json(result.rows);
     } catch (err) {
         console.error('Database Error:', err.message);
@@ -67,67 +64,72 @@ app.get('/api/bookings', async (req, res) => {
     }
 });
 
+// SAVE BOOKINGS - FIXED VERSION
 app.post('/api/bookings', async (req, res) => {
-    // This looks for the 'bookings' package we sent from the frontend
-    const { bookings } = req.body; 
+    console.log('Received request body:', JSON.stringify(req.body, null, 2));
     
-    try {
-        // Clear old dates to keep the database fresh
-        await pool.query('DELETE FROM bookings');
-
-        for (const item of bookings) {
-            await pool.query(
-                'INSERT INTO bookings (booking_date, status) VALUES ($1, $2)',
-                [item.date, item.status]
-            );
-        }
-
-        console.log(`✅ Saved ${bookings.length} dates to the database.`);
-        res.json({ success: true });
-    } catch (err) {
-        console.error('❌ Database Save Error:', err.message);
-        res.status(500).json({ error: 'Save failed' });
+    // Handle BOTH formats: array directly OR object with { bookings: [] }
+    let bookings = req.body;
+    
+    // If it's an object with a 'bookings' property, extract it
+    if (bookings && bookings.bookings && Array.isArray(bookings.bookings)) {
+        bookings = bookings.bookings;
     }
-});
-
-// 6. SAVE ROUTE: This is what March 20th needs to turn green
-app.post('/api/bookings', async (req, res) => {
-    const { bookings } = req.body;
+    
+    // If it's not an array, wrap it
+    if (!Array.isArray(bookings)) {
+        bookings = [bookings];
+    }
+    
+    console.log(`Processing ${bookings.length} bookings`);
     
     try {
-        // Clear existing bookings first (to avoid duplicates) or use an UPSERT
+        // Clear existing bookings
         await pool.query('DELETE FROM bookings');
+        console.log('Cleared existing bookings');
 
-        for (const booking of bookings) {
-            // Convert British/ISO dates to pure YYYY-MM-DD for the database
-            const dbDate = new Date(booking.date).toISOString().split('T')[0];
+        // Insert new bookings
+        for (const item of bookings) {
+            // Handle BOTH field names: 'booking_date' (frontend) OR 'date' (backend)
+            const bookingDate = item.booking_date || item.date;
+            const status = item.status || 'available';
+            
+            if (!bookingDate) {
+                console.error('Missing date in item:', item);
+                continue;
+            }
+            
+            console.log(`Inserting: ${bookingDate} -> ${status}`);
             
             await pool.query(
                 'INSERT INTO bookings (booking_date, status) VALUES ($1, $2)',
-                [dbDate, booking.status]
+                [bookingDate, status]
             );
         }
 
-        console.log(`Successfully saved ${bookings.length} bookings.`);
-        res.json({ success: true, message: 'Bookings saved to database' });
+        console.log(`✅ Saved ${bookings.length} bookings to database`);
+        res.json({ success: true, message: `Saved ${bookings.length} bookings` });
+        
     } catch (err) {
-        console.error('Save Error:', err.message);
-        res.status(500).json({ error: 'Failed to save bookings', details: err.message });
+        console.error('❌ Database Save Error:', err.message);
+        res.status(500).json({ error: 'Save failed', details: err.message });
     }
 });
 
+// Clear all bookings
 app.delete('/api/bookings/clear', async (req, res) => {
     try {
         await pool.query('DELETE FROM bookings');
-        res.json({ success: true, message: 'Database cleared' });
+        console.log('🗑️ Database cleared');
+        res.json({ success: true, message: 'Database wiped' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Clear Error:', err.message);
+        res.status(500).json({ error: 'Database could not be cleared', details: err.message });
     }
 });
 
-// --- EMERGENCY LOGIN DO NOT LEAVE IN PRODUCTION ---
+// Emergency login route (for testing only)
 app.post('/api/login', (req, res) => {
-    // This allows you to enter the calendar without a password check
     console.log("Emergency Login Triggered");
     res.json({ 
         success: true, 
@@ -136,42 +138,8 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// This is the specific "Save" route your frontend is calling
-app.post('/api/bookings', async (req, res) => {
-    const { bookings } = req.body;
-    
-    try {
-        // 1. Clear existing bookings (to keep it simple)
-        await pool.query('DELETE FROM bookings');
-
-        // 2. Insert the new ones
-        for (const item of bookings) {
-            await pool.query(
-                'INSERT INTO bookings (booking_date, status) VALUES ($1, $2)',
-                [item.date, item.status]
-            );
-        }
-
-        console.log(`✅ Database updated: Saved ${bookings.length} dates.`);
-        res.json({ success: true });
-    } catch (err) {
-        console.error('❌ Database Error:', err.message);
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Route to handle the "Clear All" request
-app.delete('/api/bookings/clear', async (req, res) => {
-    try {
-        await pool.query('DELETE FROM bookings');
-        console.log('🗑️ Database cleared.');
-        res.json({ success: true, message: 'Database wiped' });
-    } catch (err) {
-        console.error('Clear Error:', err.message);
-        res.status(500).json({ error: 'Database could not be cleared' });
-    }
-});
-
+// Start server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
+    console.log(`API URL: http://localhost:${port}/api/bookings`);
 });
