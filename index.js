@@ -45,6 +45,16 @@ app.get('/', (req, res) => {
     res.send('Locum Backend is ONLINE 🚀');
 });
 
+// This tells the backend what to do when the calendar just asks for "/api"
+app.get('/api', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM bookings ORDER BY booking_date ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 5. BOOKINGS ROUTE: The engine for your calendar
 app.get('/api/bookings', async (req, res) => {
     try {
